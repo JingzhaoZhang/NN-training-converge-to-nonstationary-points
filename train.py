@@ -296,7 +296,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
     with open(log_train_file, 'w') as log_tf, open(log_valid_file, 'w') as log_vf, open(log_sharp_file, 'w') as log_sf, open(log_noise_file, 'w') as log_nf:
         log_tf.write('epoch,loss,accu1\n')
-        log_nf.write('epoch,sto_grad_norm,stograd_linf,noisenorm,gradnorm,l1norm,linfnorm, update_size, change_in_grad_sq\n')
+        log_nf.write('epoch,sto_grad_norm,stograd_linf,noisenorm,gradnorm,l1norm,linfnorm, update_size, change_in_grad_sq, momentum_size\n')
 #         log_sf.write('epoch,sharpness,' +','.join(weight_names) + '\n')
         log_vf.write('epoch,valloss,valaccu\n')
         log_sf.write('epoch,sharpness, dir_sharpness' + '\n')
@@ -453,12 +453,11 @@ def compute_sto_grad_norm(dataloader, model, criterion, optimizer, epoch, args, 
     # Turn on training mode which enables dropout.
     model.train()
     true_grads = compute_grad_epoch(dataloader, model, criterion, optimizer, epoch, args)
-<<<<<<< HEAD
+
     if not prev_true_grad:
         prev_true_grad = true_grads
 
-=======
->>>>>>> bc48dcbaad3b7c0a0c30f03fa6d45e0853f187f4
+
     grad_change_sq, _, _ = compute_noise(true_grads, prev_true_grad)
     gradnorm_sq = compute_norm(true_grads) 
     true_gradnorml1 = compute_l1norm(true_grads) 
@@ -497,7 +496,7 @@ def compute_sto_grad_norm(dataloader, model, criterion, optimizer, epoch, args, 
     return noise_sq, stograd_sq, stograd_linf, gradnorm_sq, true_gradnorml1, true_gradnormlinf, grad_change_sq    
 
 
-def save_stats(stats_loader, model, criterion, optimizer, epoch, args, prev_true_grad, update_size):
+def save_stats(stats_loader, model, criterion, optimizer, epoch, args, prev_true_grad, update_size, m_size):
     # switch to train mode
     model.train()
     stats_iterator = iter(stats_loader)
@@ -506,16 +505,10 @@ def save_stats(stats_loader, model, criterion, optimizer, epoch, args, prev_true
         print("Saving sharpness")
         model.zero_grad()
         dir_sharpness = dir_hessian(model, stats_iterator, criterion, args.sharpness_batches)
-<<<<<<< HEAD
         stats_iterator = iter(stats_loader)
-
         model.zero_grad()
         sharpness = eigen_hessian(model, stats_iterator, criterion, args.sharpness_batches)
         stats_iterator = iter(stats_loader)
-=======
-        model.zero_grad()
-        sharpness = eigen_hessian(model, stats_iterator, criterion, args.sharpness_batches)
->>>>>>> bc48dcbaad3b7c0a0c30f03fa6d45e0853f187f4
 
 #         weight_names, weights = param_weights(model)
 #         weights_str = ['%4.4f' % w for w in weights]
@@ -526,30 +519,23 @@ def save_stats(stats_loader, model, criterion, optimizer, epoch, args, prev_true
         model.zero_grad()
         # true_gradnorm, sto_grad_norm, sto_noise_norm, true_gradnorml1, true_gradnormlinf = 0,0,0, 0, 0
         noise_sq, stograd_sq, stograd_linf, gradnorm_sq, true_gradnorml1, true_gradnormlinf, grad_change_sq = compute_sto_grad_norm(stats_iterator, model, criterion, 
-<<<<<<< HEAD
                                                                                                             optimizer, epoch, args, prev_true_grad)
         sto_grad_norm = np.mean(stograd_sq)
         sto_noise_norm = np.mean(noise_sq)
         stograd_linf = np.mean(stograd_linf)
         
-=======
-                                                                                                                    optimizer, epoch, args, prev_true_grad)
-        sto_grad_norm = np.mean(stograd_sq)
-        sto_noise_norm = np.mean(noise_sq)
-        stograd_linf = np.mean(stograd_linf)
-             
->>>>>>> bc48dcbaad3b7c0a0c30f03fa6d45e0853f187f4
+
     if args.save_sharpness:
         with open(log_sharp_file, 'a') as log_vf:
             log_vf.write('{epoch},{sharpness: 8.5f},{dir_sharpness: 8.5f},'.format(epoch=epoch, sharpness=sharpness, dir_sharpness=dir_sharpness) + '\n')     
   
     if args.save_noise:
         with open(log_noise_file, 'a') as log_tf:
-            log_tf.write('{epoch},{sto_grad_norm:3.3f},{stograd_linf:3.3f},{noisenorm:3.3f},{gradnorm:3.3f},{l1norm:3.3f},{linfnorm:3.3f},{update_size:3.3f},{grad_change_sq:3.3f}\n'.format(
+            log_tf.write('{epoch},{sto_grad_norm:3.3f},{stograd_linf:3.3f},{noisenorm:3.3f},{gradnorm:3.3f},{l1norm:3.3f},{linfnorm:3.3f},{update_size:3.3f},{grad_change_sq:3.3f},{m_size:3.3f}\n'.format(
                 epoch=epoch,
                 gradnorm=gradnorm_sq, sto_grad_norm=sto_grad_norm, stograd_linf=stograd_linf,
                 noisenorm=sto_noise_norm, l1norm=true_gradnorml1, linfnorm=true_gradnormlinf, 
-                update_size=update_size, grad_change_sq=grad_change_sq))
+                update_size=update_size, grad_change_sq=grad_change_sq, m_size=m_size))
             
 
 def train(train_loader, stats_loader, model, criterion, optimizer, epoch, args, pretrained=False):
@@ -565,7 +551,6 @@ def train(train_loader, stats_loader, model, criterion, optimizer, epoch, args, 
 
     # switch to train mode
     model.train()
-                
     end = time.time()
     for i, (images, target) in enumerate(train_loader):
         
@@ -590,7 +575,7 @@ def train(train_loader, stats_loader, model, criterion, optimizer, epoch, args, 
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
-        prev_true_grad, update_size = None, 0
+        prev_true_grad, update_size, m_size = None, 0, 0
 
         if not pretrained:
             if args.save_noise and i % args.stat_freq == 0:
@@ -605,9 +590,14 @@ def train(train_loader, stats_loader, model, criterion, optimizer, epoch, args, 
 
                 print("saving stat info before update")
                 update_direction = {}
+                momentums = {}
+                
+                for i, group in enumerate(optimizer.param_groups):
+                    momentums[i] = group['momentum']
+                
                 clone_grad(model, update_direction)
                 update_size = compute_norm(update_direction)**0.5 * optimizer.param_groups[0]['lr']
-
+                m_size = compute_norm(momentums)
             optimizer.step()
         
 
@@ -621,7 +611,7 @@ def train(train_loader, stats_loader, model, criterion, optimizer, epoch, args, 
             progress.display(i)
 
         if args.save_noise and (pretrained or i % args.stat_freq == 0):
-            save_stats(stats_loader, copy.deepcopy(model), criterion, optimizer, epoch, args, prev_true_grad, update_size)
+            save_stats(stats_loader, copy.deepcopy(model), criterion, optimizer, epoch, args, prev_true_grad, update_size, m_size)
 
         if pretrained:
             break
