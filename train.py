@@ -586,19 +586,20 @@ def train(train_loader, stats_loader, model, criterion, optimizer, epoch, args, 
 
             loss.backward()
 
+            optimizer.step()
+
             if args.save_noise and i % args.stat_freq == 0:
 
                 print("saving stat info before update")
                 update_direction = {}
                 momentums = {}
                 
-                for i, group in enumerate(optimizer.param_groups):
-                    momentums[i] = group['momentum']
+                for i, group in enumerate(list(optimizer.state.values())):
+                    momentums[str(i)] = group['momentum_buffer']
                 
                 clone_grad(model, update_direction)
                 update_size = compute_norm(update_direction)**0.5 * optimizer.param_groups[0]['lr']
                 m_size = compute_norm(momentums)
-            optimizer.step()
         
 
 

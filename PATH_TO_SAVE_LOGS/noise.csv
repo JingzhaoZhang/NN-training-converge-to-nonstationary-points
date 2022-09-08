@@ -1,0 +1,1 @@
+epoch,sto_grad_norm,stograd_linf,noisenorm,gradnorm,l1norm,linfnorm, update_size, change_in_grad_sq, momentum_size
