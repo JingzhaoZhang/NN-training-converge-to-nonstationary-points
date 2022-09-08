@@ -498,6 +498,7 @@ def compute_sto_grad_norm(dataloader, model, criterion, optimizer, epoch, args, 
 
 def save_stats(stats_loader, model, criterion, optimizer, epoch, args, prev_true_grad, update_size, m_size):
     # switch to train mode
+    print("Called save_stats")
     model.train()
     stats_iterator = iter(stats_loader)
 
@@ -530,6 +531,7 @@ def save_stats(stats_loader, model, criterion, optimizer, epoch, args, prev_true
             log_vf.write('{epoch},{sharpness: 8.5f},{dir_sharpness: 8.5f},'.format(epoch=epoch, sharpness=sharpness, dir_sharpness=dir_sharpness) + '\n')     
   
     if args.save_noise:
+        print("Writing noise.csv")
         with open(log_noise_file, 'a') as log_tf:
             log_tf.write('{epoch},{sto_grad_norm:3.3f},{stograd_linf:3.3f},{noisenorm:3.3f},{gradnorm:3.3f},{l1norm:3.3f},{linfnorm:3.3f},{update_size:3.3f},{grad_change_sq:3.3f},{m_size:3.3f}\n'.format(
                 epoch=epoch,
@@ -594,12 +596,12 @@ def train(train_loader, stats_loader, model, criterion, optimizer, epoch, args, 
                 update_direction = {}
                 momentums = {}
                 
-                for i, group in enumerate(list(optimizer.state.values())):
-                    momentums[str(i)] = group['momentum_buffer']
+                for groupi, group in enumerate(list(optimizer.state.values())):
+                    momentums[str(groupi)] = group['momentum_buffer']
                 
                 clone_grad(model, update_direction)
                 update_size = compute_norm(update_direction)**0.5 * optimizer.param_groups[0]['lr']
-                m_size = compute_norm(momentums)
+                m_size = compute_norm(momentums) ** 0.5
         
 
 
@@ -610,7 +612,6 @@ def train(train_loader, stats_loader, model, criterion, optimizer, epoch, args, 
 
         if i % args.print_freq == 0:
             progress.display(i)
-
         if args.save_noise and (pretrained or i % args.stat_freq == 0):
             save_stats(stats_loader, copy.deepcopy(model), criterion, optimizer, epoch, args, prev_true_grad, update_size, m_size)
 
